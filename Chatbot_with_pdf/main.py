@@ -1,42 +1,49 @@
-from qa_engine import load_and_split, save_to_chroma, get_qa_chain
-from langchain.callbacks.base import BaseCallbackHandler
-from typing import Any
-import streamlit as st
-import tempfile
 import os
+from dotenv import load_dotenv
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+import streamlit as st
+from langchain_community.document_loaders import PyPDFLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.vectorstores import Chroma
 
-class StreamHandler(BaseCallbackHandler):
-    def __init__(self):
-        self.text = ""
 
-    def on_llm_new_token(self, token: str, **kwargs: Any):
-        self.text += token
-        st.session_state.output_placeholder.markdown(self.text)
+load_dotenv()
 
-st.set_page_config(page_title="Notes chatbot with Gemini", layout="wide")
-st.title("📄 Chat with Your Notes")
+st.set_page_config(page_title="Chatbot with PDF", page_icon=":books:", layout="wide")
+st.title("Chatbot with PDF")
 
-uploaded_file = st.file_uploader("Upload a PDF, Markdown, or Text file", type=["pdf", "md", "txt"])
+current_dir = os.path.dirname(os.path.abspath(__file__))
+file_path = os.path.join(current_dir, "store", "javascript.pdf")
+persistent_directory = os.path.join(current_dir, "db", "chroma_db")
 
-if uploaded_file:
-    extension = os.path.splitext(uploaded_file.name)[1].lower()
-    with tempfile.NamedTemporaryFile(delete=False, suffix=extension) as tmp:
-        tmp.write(uploaded_file.read())
-        tmp_path = tmp.name
+if not os.path.exists(persistent_directory):
+    st.write("Persistent directory does not exist. Please create it first.")
 
-    st.success("✅ File uploaded and being processed...")
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"File not found: {file_path}")
 
-    chunks = load_and_split(tmp_path)
-    vectordb = save_to_chroma(chunks)
+    # Read the document from the file
+    loader = PyPDFLoader(file_path)
+    documents = loader.load()
 
-    stream_handler = StreamHandler()
-    qa_chain = get_qa_chain(vectordb, callbacks=[stream_handler])
-    st.session_state.qa_chain = qa_chain
+    # Split the document from the file
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
+    docs = text_splitter.split_documents(documents)
 
-    st.success("✅ Ready to ask questions!")
+    # Display the number of chunks created
+    st.write("---- Document chunks information ----")
+    st.write("Total number of chunks: ", {len(docs)})
+    st.write("First chunk: ", {docs[0].page_content})
 
-if "qa_chain" in st.session_state:
-    questions = st.text_input("Ask a question about the document:")
-    if questions:
-        st.session_state.output_placeholder = st.empty()
-        st.session_state.qa_chain.invoke({"query": questions})
+    # Create Embeddings
+    st.write(" ---- Creating Embeddings ----")
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+    st.write("Embeddings created successfully.")
+
+    # create a vector store
+    st.write(" ---- Creating Vector Store ----")
+    db = Chroma.from_documents(docs, embeddings, persist_directory=persistent_directory)
+    st.write("Vectors created successfully.")
+else:
+    st.write("Persistent directory already exists. Loading existing vector store.")
+    db = Chroma(persist_directory=persistent_directory, embedding_function=GoogleGenerativeAIEmbeddings(model="gemini-1.5-flash"))

@@ -4,3 +4,7 @@ env/
 chroma_store/
 
 __pycache__/
+
+store/
+
+db/
