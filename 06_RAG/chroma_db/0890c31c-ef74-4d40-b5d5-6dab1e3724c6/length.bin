@@ -1,0 +1,10 @@
+Follow Tajamul KhanData Blogs
+@Tajamulkhann
+37. What is a named tuple?
+self refers to the instance of a class and allows access to its attributes and methods.
+A tuple with named fields.
+self refers to the instance of a class and allows access to its attributes and methods.
+from collections import namedtuple
+Person = namedtuple("Person", ["name", "age"])
+p = Person("Alice", 30)
+print(p.name)  # Ali
